@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">AI Smart Camera</string>
+    <string name="camera_permission_required">Camera Permission Required</string>
+    <string name="camera_permission_rationale">AI Smart Camera needs access to your camera to analyze scenes and capture enhanced photos in real time.</string>
+    <string name="grant_permission">Grant Permission</string>
+    <string name="open_settings">Open Settings</string>
+</resources>

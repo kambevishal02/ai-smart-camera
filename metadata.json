@@ -1,0 +1,6 @@
+{
+  "name": "AI Smart Camera",
+  "description": "Intelligent camera app that automatically analyzes scenes, lighting, and subjects to optimize camera configuration and local image enhancement.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
