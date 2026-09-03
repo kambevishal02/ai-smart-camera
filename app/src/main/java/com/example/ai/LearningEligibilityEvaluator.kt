@@ -51,14 +51,14 @@ object LearningEligibilityEvaluator {
         }
 
         // 2. Capture failed check
-        if (session.photoA_Uri == null && session.photoA_Bitmap == null) {
+        if (session.photoA_Uri == null && session.photoA_Bitmap == null && session.photoA_Metrics.totalTechnicalScore <= 0) {
             return EligibilityCheckResult(
                 isEligible = false,
                 rejectionReason = LearningRejectionReason.CAPTURE_FAILED,
                 explanation = "Standard AUTO capture frame was missing or null."
             )
         }
-        if (session.photoB_Uri == null && session.photoB_Bitmap == null) {
+        if (session.photoB_Uri == null && session.photoB_Bitmap == null && session.photoB_Metrics.totalTechnicalScore <= 0) {
             return EligibilityCheckResult(
                 isEligible = false,
                 rejectionReason = LearningRejectionReason.CAPTURE_FAILED,
@@ -66,17 +66,7 @@ object LearningEligibilityEvaluator {
             )
         }
 
-        // 3. Image quality threshold check
-        if (aMetrics.totalTechnicalScore < MIN_TECHNICAL_SCORE_THRESHOLD ||
-            bMetrics.totalTechnicalScore < MIN_TECHNICAL_SCORE_THRESHOLD) {
-            return EligibilityCheckResult(
-                isEligible = false,
-                rejectionReason = LearningRejectionReason.POOR_IMAGE_QUALITY,
-                explanation = "Overall technical score was too low (<$MIN_TECHNICAL_SCORE_THRESHOLD) for reliable calibration."
-            )
-        }
-
-        // 4. Motion stability check
+        // 3. Motion stability check
         val motion = sceneAnalysis?.motion
         if (motion != null) {
             if (motion.motionLevel == MotionLevel.HIGH || motion.motionScore > MAX_ALLOWABLE_MOTION_SCORE || motion.isBlurRisk) {
@@ -88,7 +78,7 @@ object LearningEligibilityEvaluator {
             }
         }
 
-        // 5. Scene classification confidence check
+        // 4. Scene classification confidence check
         val confidence = sceneAnalysis?.confidence ?: session.recommendation.confidence
         if (confidence < MIN_SCENE_CONFIDENCE_THRESHOLD) {
             return EligibilityCheckResult(
@@ -98,7 +88,26 @@ object LearningEligibilityEvaluator {
             )
         }
 
-        // 6. Face detection stability check
+        // 5. Hardware fallback severity check
+        if (session.fallbackSettings.containsKey("EV Compensation") || session.fallbackSettings.isNotEmpty()) {
+            return EligibilityCheckResult(
+                isEligible = false,
+                rejectionReason = LearningRejectionReason.HARDWARE_FALLBACK_MISMATCH,
+                explanation = "Device HAL failed to apply critical EV compensation, falling back to software tone curve."
+            )
+        }
+
+        // 6. Image quality threshold check
+        if (aMetrics.totalTechnicalScore < MIN_TECHNICAL_SCORE_THRESHOLD ||
+            bMetrics.totalTechnicalScore < MIN_TECHNICAL_SCORE_THRESHOLD) {
+            return EligibilityCheckResult(
+                isEligible = false,
+                rejectionReason = LearningRejectionReason.POOR_IMAGE_QUALITY,
+                explanation = "Overall technical score was too low (<$MIN_TECHNICAL_SCORE_THRESHOLD) for reliable calibration."
+            )
+        }
+
+        // 7. Face detection stability check
         val hasFaceA = aMetrics.faceExposureLuma != null
         val hasFaceB = bMetrics.faceExposureLuma != null
         val isPortraitScene = session.testScene.name.contains("PORTRAIT", ignoreCase = true)
@@ -107,17 +116,6 @@ object LearningEligibilityEvaluator {
                 isEligible = false,
                 rejectionReason = LearningRejectionReason.UNSTABLE_FACE_DETECTION,
                 explanation = "Face presence was inconsistent between comparative shots in portrait scene."
-            )
-        }
-
-        // 7. Hardware fallback severity check
-        // If hardware fallback prevented applying EV compensation completely on an exposure-critical scene
-        if (session.fallbackSettings.containsKey("EV Compensation") &&
-            abs(session.recommendation.exposureCompensationEv) > 0.6f) {
-            return EligibilityCheckResult(
-                isEligible = false,
-                rejectionReason = LearningRejectionReason.HARDWARE_FALLBACK_MISMATCH,
-                explanation = "Device HAL failed to apply critical EV compensation, falling back to software tone curve."
             )
         }
 

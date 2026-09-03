@@ -157,7 +157,10 @@ data class CapturedPhoto(
     val recommendation: CameraRecommendation? = null,
     val savedUri: Uri? = uri,
     val rawBitmap: Bitmap? = originalBitmap,
-    val qualityScore: PhotoQualityScore? = null
+    val qualityScore: PhotoQualityScore? = null,
+    val debugInfo: SubjectEnhancementDebugInfo? = null,
+    val metricsOriginal: ObjectivePhotoQualityMetrics? = null,
+    val metricsEnhanced: ObjectivePhotoQualityMetrics? = null
 ) {
     val displayBitmap: Bitmap? get() = enhancedBitmap ?: originalBitmap ?: rawBitmap
 }

@@ -63,7 +63,7 @@ object MediaSaver {
             imageUri = resolver.insert(collection, contentValues)
             if (imageUri != null) {
                 resolver.openOutputStream(imageUri)?.use { outputStream: OutputStream ->
-                    bitmap.compress(Bitmap.CompressFormat.JPEG, 95, outputStream)
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 98, outputStream)
                     outputStream.flush()
                 }
 
@@ -83,7 +83,7 @@ object MediaSaver {
                 val appDir = File(picturesDir, "AISmartCamera").apply { mkdirs() }
                 val file = File(appDir, fileName)
                 FileOutputStream(file).use { out ->
-                    bitmap.compress(Bitmap.CompressFormat.JPEG, 95, out)
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 98, out)
                     out.flush()
                 }
                 imageUri = Uri.fromFile(file)

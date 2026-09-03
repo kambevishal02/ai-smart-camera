@@ -24,11 +24,11 @@ object AdaptiveLearningPolicy {
      * Minimum number of consistent, learning-eligible A/B test samples
      * before any parameter adjustment is applied.
      * 1 result: NO CHANGE
-     * < 3 results: ACCUMULATE ONLY
-     * 3-5 results: SMALL UPDATE
+     * < 5 results: ACCUMULATE ONLY
+     * 5-9 results: SMALL UPDATE
      * >= 10 results: STRONGER UPDATE
      */
-    const val MIN_SAMPLE_COUNT_FOR_UPDATE = 3
+    const val MIN_SAMPLE_COUNT_FOR_UPDATE = 5
     const val STRONG_SAMPLE_COUNT_THRESHOLD = 10
 
     /**

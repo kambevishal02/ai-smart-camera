@@ -129,15 +129,11 @@ object AdaptiveProfileStore {
      */
     fun rollbackLastChange(): Boolean {
         val prev = _previousProfile.value ?: return false
-        val rolledBackProfile = prev.copy(
-            profileVersion = _currentProfile.value.profileVersion + 1,
-            lastModifiedTimestamp = System.currentTimeMillis()
-        )
-        _currentProfile.value = rolledBackProfile
+        _currentProfile.value = prev
         _previousProfile.value = null
 
         val record = AdaptiveLearningRecord(
-            deviceProfile = rolledBackProfile.deviceIdentifier.model,
+            deviceProfile = prev.deviceIdentifier.model,
             scene = TestSceneType.DAYLIGHT,
             lighting = LightingCondition.NORMAL,
             lightingContext = LightingContextType.NORMAL,
@@ -164,10 +160,10 @@ object AdaptiveProfileStore {
      */
     fun resetToBaseline() {
         val current = _currentProfile.value
-        _previousProfile.value = current
+        _previousProfile.value = null
         val baseline = AdaptiveCameraProfile(
             profileId = current.profileId,
-            profileVersion = current.profileVersion + 1,
+            profileVersion = 1,
             createdTimestamp = current.createdTimestamp,
             lastModifiedTimestamp = System.currentTimeMillis(),
             deviceIdentifier = current.deviceIdentifier,
@@ -198,6 +194,10 @@ object AdaptiveProfileStore {
         AppLogger.i("AdaptiveProfileStore", "Reset adaptive profile to baseline")
     }
 
+    fun recordEvidenceAccumulation(newProfile: AdaptiveCameraProfile) {
+        _currentProfile.value = newProfile
+    }
+
     fun clearHistory() {
         _learningHistory.value = emptyList()
         totalEvaluatedSessions = 0
@@ -217,6 +217,8 @@ object AdaptiveProfileStore {
         root.put("totalEvaluatedSessions", totalEvaluatedSessions)
         root.put("learningEligibleSessions", learningEligibleSessions)
         root.put("rejectedSessions", rejectedSessions)
+        root.put("profileVersion", _currentProfile.value.profileVersion)
+        root.put("deviceIdentifier", _currentProfile.value.deviceIdentifier.toJsonObject())
 
         // Active Profile
         root.put("currentProfile", _currentProfile.value.toJsonObject())
@@ -241,10 +243,10 @@ object AdaptiveProfileStore {
      */
     fun exportToCsv(): String {
         val sb = StringBuilder()
-        sb.appendLine("RecordID,Timestamp,Device,Scene,Lighting,Motion,Parameter,PrevValue,Correction,NewValue,Confidence,Samples,Decision,RejectionReason,Explanation")
+        sb.appendLine("timestamp,scene,lighting,parameter,previousValue,correction,newValue,confidence,decision,rejectionReason")
         _learningHistory.value.forEach { r ->
             sb.appendLine(
-                "\"${r.id}\",\"${r.formattedTime}\",\"${r.deviceProfile}\",\"${r.scene.name}\",\"${r.lighting.name}\",\"${r.motion.name}\",\"${r.parameterName}\",${String.format(Locale.US, "%.3f", r.previousParameter)},${String.format(Locale.US, "%.3f", r.calculatedCorrection)},${String.format(Locale.US, "%.3f", r.newParameter)},${String.format(Locale.US, "%.2f", r.confidence)},${r.sampleCount},\"${r.learningDecision}\",\"${r.rejectionReason?.name ?: "NONE"}\",\"${r.explanation.replace("\"", "'")}\""
+                "\"${r.formattedTime}\",${r.scene.name},${r.lighting.name},${r.parameterName},${String.format(Locale.US, "%.3f", r.previousParameter)},${String.format(Locale.US, "%.3f", r.calculatedCorrection)},${String.format(Locale.US, "%.3f", r.newParameter)},${String.format(Locale.US, "%.2f", r.confidence)},${r.learningDecision},${r.rejectionReason?.name ?: "NONE"}"
             )
         }
         return sb.toString()

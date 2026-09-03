@@ -281,14 +281,22 @@ object AdaptiveIntelligenceEngine {
             maxTotalDeviation = AdaptiveParameterBounds.MAX_NOISE_REDUCTION_BIAS
         )
 
+        val isUpdated = newSampleCount >= AdaptiveLearningPolicy.MIN_SAMPLE_COUNT_FOR_UPDATE
+
+        val finalExposureBias = if (isUpdated) newExposureBias else 0.0f
+        val finalHighlightBias = if (isUpdated) newHighlightBias else 0.0f
+        val finalShadowBias = if (isUpdated) newShadowBias else 0.0f
+        val finalSharpnessBias = if (isUpdated) newSharpnessBias else 0.0f
+        val finalNoiseBias = if (isUpdated) newNoiseBias else 0.0f
+
         val updatedSceneParams = existingParams.copy(
-            exposureBias = newExposureBias,
-            highlightProtectionBias = newHighlightBias,
-            shadowRecoveryBias = newShadowBias,
-            sharpeningBias = newSharpnessBias,
-            noiseReductionBias = newNoiseBias,
+            exposureBias = finalExposureBias,
+            highlightProtectionBias = finalHighlightBias,
+            shadowRecoveryBias = finalShadowBias,
+            sharpeningBias = finalSharpnessBias,
+            noiseReductionBias = finalNoiseBias,
             sampleCount = newSampleCount,
-            confidence = updatedConfidence,
+            confidence = if (isUpdated) updatedConfidence else existingParams.confidence,
             lastUpdatedTimestamp = System.currentTimeMillis()
         ).clampToBounds()
 
@@ -300,9 +308,10 @@ object AdaptiveIntelligenceEngine {
             lastModifiedTimestamp = System.currentTimeMillis()
         )
 
-        val isUpdated = newSampleCount >= AdaptiveLearningPolicy.MIN_SAMPLE_COUNT_FOR_UPDATE
         if (isUpdated && !AdaptiveProfileStore.isLearningPaused.value) {
             AdaptiveProfileStore.updateProfile(newProfile)
+        } else {
+            AdaptiveProfileStore.recordEvidenceAccumulation(newProfile)
         }
 
         val decision = if (isUpdated) "ACCEPTED_UPDATE" else "EVIDENCE_ACCUMULATED_NO_UPDATE"
@@ -316,7 +325,7 @@ object AdaptiveIntelligenceEngine {
             previousParameter = existingParams.exposureBias,
             observedMetric = "Smart Luma=${String.format("%.1f", smartMetrics.brightnessLuma)}%, ShdClip=${String.format("%.1f", smartMetrics.shadowClippingPct)}%, HlClip=${String.format("%.1f", smartMetrics.highlightClippingPct)}%",
             calculatedCorrection = observedCorrections["exposureBias"] ?: 0.0f,
-            newParameter = newExposureBias,
+            newParameter = if (isUpdated) newExposureBias else existingParams.exposureBias,
             confidence = updatedConfidence,
             sampleCount = newSampleCount,
             learningDecision = decision,

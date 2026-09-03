@@ -88,8 +88,14 @@ class SmartCaptureController(
     val abProgress: StateFlow<String?> = _abProgress.asStateFlow()
 
     fun updateAnalysisState(isAnalyzing: Boolean) {
-        if (_captureStatus.value == SmartCaptureStatus.ANALYZING || _captureStatus.value == SmartCaptureStatus.READY) {
-            _captureStatus.value = if (isAnalyzing) SmartCaptureStatus.ANALYZING else SmartCaptureStatus.READY
+        if (!isAnalyzing && _captureStatus.value == SmartCaptureStatus.ANALYZING) {
+            _captureStatus.value = SmartCaptureStatus.READY
+        }
+    }
+
+    fun resetToAnalyzing() {
+        if (_captureStatus.value == SmartCaptureStatus.READY) {
+            _captureStatus.value = SmartCaptureStatus.ANALYZING
         }
     }
 
@@ -204,16 +210,26 @@ class SmartCaptureController(
                 appliedSettingsMap["Profile Applied"] = activeProfile.displayName
 
                 // 4. Apply Calibrated Image Processing
-                val finalBitmap = if (isSmartAuto || manualProfileOverride != null) {
+                var finalBitmap = rawBitmap
+                var debugInfo: com.example.model.SubjectEnhancementDebugInfo? = null
+                var metricsOriginal: com.example.model.ObjectivePhotoQualityMetrics? = null
+                var metricsEnhanced: com.example.model.ObjectivePhotoQualityMetrics? = null
+
+                if (isSmartAuto || manualProfileOverride != null) {
                     val baseParams = if (manualProfileOverride != null) {
                         EnhancementParameters.defaultForProfile(manualProfileOverride)
                     } else {
                         recommendation.enhancementParams
                     }
                     val calibratedParams = CalibrationEngine.applyCalibration(baseParams, activeProfile)
-                    imageProcessor.enhanceImage(rawBitmap, activeProfile, calibratedParams)
+                    val result = imageProcessor.enhanceImageWithDetails(rawBitmap, activeProfile, calibratedParams, currentAnalysis)
+                    finalBitmap = result.bitmap
+                    debugInfo = result.debugInfo
+                    metricsOriginal = result.metricsOriginal
+                    metricsEnhanced = result.metricsEnhanced
                 } else {
-                    rawBitmap
+                    val primaryFaceBox = currentAnalysis.subject.detectedFaces.firstOrNull()?.bounds
+                    metricsOriginal = metricCalculator.calculateObjectiveMetrics(rawBitmap, primaryFaceBox)
                 }
 
                 // 5. Compute Post-Capture Photo Quality Score
@@ -279,7 +295,10 @@ class SmartCaptureController(
                     sceneAnalysis = currentAnalysis,
                     recommendation = recommendation,
                     savedUri = savedUri,
-                    qualityScore = postQualityScore
+                    qualityScore = postQualityScore,
+                    debugInfo = debugInfo,
+                    metricsOriginal = metricsOriginal,
+                    metricsEnhanced = metricsEnhanced
                 )
 
                 withContext(Dispatchers.Main) {
@@ -346,6 +365,7 @@ class SmartCaptureController(
                 // Compute Photo A Metrics
                 val primaryFaceBox = currentAnalysis.subject.detectedFaces.firstOrNull()?.bounds
                 val photoA_Metrics = metricCalculator.calculateMetrics(photoA_RawBitmap, primaryFaceBox)
+                val photoA_ObjectiveMetrics = metricCalculator.calculateObjectiveMetrics(photoA_RawBitmap, primaryFaceBox)
 
                 // Save Photo A (Original unenhanced)
                 val photoA_Uri = MediaSaver.saveBitmapToGallery(
@@ -392,13 +412,21 @@ class SmartCaptureController(
                 _abProgress.value = "Processing & Calculating Metrics..."
                 _captureStatus.value = SmartCaptureStatus.PROCESSING
 
-                // Apply Calibrated Image Enhancement
+                // Apply Calibrated Subject-Aware Image Enhancement
                 val profile = recommendation.imageProcessingProfile
                 val calibratedParams = CalibrationEngine.applyCalibration(recommendation.enhancementParams, profile)
                 appliedSettingsB["Profile Applied"] = profile.displayName
                 appliedSettingsB["Calibration"] = CalibrationEngine.getSummaryString()
 
-                val photoB_EnhancedBitmap = imageProcessor.enhanceImage(photoB_RawBitmap, profile, calibratedParams)
+                val enhancementResult = imageProcessor.enhanceImageWithDetails(
+                    source = photoB_RawBitmap,
+                    profile = profile,
+                    params = calibratedParams,
+                    sceneAnalysis = currentAnalysis
+                )
+                val photoB_EnhancedBitmap = enhancementResult.bitmap
+                val photoB_ObjectiveMetrics = enhancementResult.metricsEnhanced
+                val subjectDebugInfo = enhancementResult.debugInfo
 
                 // Compute Photo B Metrics
                 val photoB_Metrics = metricCalculator.calculateMetrics(photoB_EnhancedBitmap, primaryFaceBox)
@@ -428,7 +456,10 @@ class SmartCaptureController(
                     recommendation = recommendation,
                     fallbackSettings = fallbackSettings,
                     processingProfile = profile,
-                    appliedCalibrationSummary = CalibrationEngine.getSummaryString()
+                    appliedCalibrationSummary = CalibrationEngine.getSummaryString(),
+                    photoA_ObjectiveMetrics = photoA_ObjectiveMetrics,
+                    photoB_ObjectiveMetrics = photoB_ObjectiveMetrics,
+                    subjectDebugInfo = subjectDebugInfo
                 )
 
                 AbTestStore.recordSession(session)

@@ -32,6 +32,7 @@ import com.example.model.EnhancementParameters
 import com.example.model.FlashRecommendation
 import com.example.model.FrameAnalysisResult
 import com.example.model.ImageProcessingProfileType
+import com.example.model.LightingCondition
 import com.example.model.SceneType
 import com.example.model.SmartCaptureStatus
 import com.example.model.TestSceneType
@@ -145,6 +146,12 @@ class CameraXController(
     // Track last applied EV to prevent redundant cameraControl calls
     private var lastAppliedEvIndex = 0
 
+    // Diagnostics rate limiting to prevent system log/audit flooding
+    private var lastLoggedScene: SceneType? = null
+    private var lastLoggedLighting: LightingCondition? = null
+    private var lastLoggedRecommendationAction: String? = null
+    private var lastLogcatDiagnosticTime = 0L
+
     override fun startCamera(
         lifecycleOwner: LifecycleOwner,
         previewView: PreviewView,
@@ -194,9 +201,9 @@ class CameraXController(
                 it.surfaceProvider = previewView.surfaceProvider
             }
 
-        // 4. Image Capture UseCase
+        // 4. Image Capture UseCase (Configured for Maximum Native Quality & Sensor Resolution)
         imageCapture = ImageCapture.Builder()
-            .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+            .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
             .setFlashMode(if (_isFlashActive.value) ImageCapture.FLASH_MODE_ON else ImageCapture.FLASH_MODE_OFF)
             .build()
 
@@ -242,7 +249,6 @@ class CameraXController(
             return
         }
         lastAnalysisTimestamp = now
-        smartCaptureController.updateAnalysisState(true)
 
         try {
             // Run analysis pipeline
@@ -255,10 +261,27 @@ class CameraXController(
             _analysisResult.value = result
             _activeRecommendation.value = recommendation
 
-            // Log diagnostic info when scene or lighting changes
-            AppLogger.logSceneDetected(result.scene, result.confidence)
-            AppLogger.logLightingDetected(result.lightingLevel, result.brightnessLuma)
-            AppLogger.logRecommendationSelected(recommendation)
+            // Log diagnostic info ONLY when state meaningfully changes or periodically (every 10s)
+            val shouldLogScene = result.scene != lastLoggedScene
+            val shouldLogLighting = result.lightingLevel != lastLoggedLighting
+            val shouldLogRec = recommendation.primaryActionText != lastLoggedRecommendationAction
+            val timeSinceLastLog = now - lastLogcatDiagnosticTime
+
+            if (shouldLogScene || shouldLogLighting || shouldLogRec || timeSinceLastLog > 10_000L) {
+                lastLogcatDiagnosticTime = now
+                if (shouldLogScene) {
+                    lastLoggedScene = result.scene
+                    AppLogger.logSceneDetected(result.scene, result.confidence)
+                }
+                if (shouldLogLighting) {
+                    lastLoggedLighting = result.lightingLevel
+                    AppLogger.logLightingDetected(result.lightingLevel, result.brightnessLuma)
+                }
+                if (shouldLogRec) {
+                    lastLoggedRecommendationAction = recommendation.primaryActionText
+                    AppLogger.logRecommendationSelected(recommendation)
+                }
+            }
 
             // If AI Auto mode is enabled and hardware supports EV compensation, apply optimal EV
             if (_isAiAutoModeEnabled.value && hardware.isEvCompensationSupported) {
@@ -279,6 +302,7 @@ class CameraXController(
 
     override fun switchCamera() {
         _isFrontCamera.value = !_isFrontCamera.value
+        smartCaptureController.resetToAnalyzing()
         sceneAnalyzer.resetHistory()
         val owner = currentLifecycleOwner ?: return
         val view = currentPreviewView ?: return

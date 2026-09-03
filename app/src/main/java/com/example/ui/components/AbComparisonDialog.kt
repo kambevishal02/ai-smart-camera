@@ -308,6 +308,19 @@ fun AbComparisonDialog(
                         metricsB = session.photoB_Metrics
                     )
 
+                    // 2.5 Subject-Aware Enhancement Diagnostics (V0.6 Quality Upgrade)
+                    if (session.subjectDebugInfo != null) {
+                        SubjectDiagnosticsCard(session.subjectDebugInfo)
+                    }
+
+                    // 2.6 Objective Photo Quality Metrics (V0.6 Quality Upgrade)
+                    if (session.photoA_ObjectiveMetrics != null && session.photoB_ObjectiveMetrics != null) {
+                        ObjectiveQualityMetricsCard(
+                            metricsA = session.photoA_ObjectiveMetrics,
+                            metricsB = session.photoB_ObjectiveMetrics
+                        )
+                    }
+
                     // 3. Detailed Technical Metrics Comparison Table (Requirement 4 & 5)
                     TechnicalMetricsTable(
                         metricsA = session.photoA_Metrics,
@@ -912,5 +925,134 @@ private fun AppliedSettingsCard(session: AbCaptureSession) {
                 }
             }
         }
+    }
+}
+
+/**
+ * Developer Diagnostics Card displaying the 15 subject-aware enhancement parameters.
+ */
+@Composable
+private fun SubjectDiagnosticsCard(debugInfo: com.example.model.SubjectEnhancementDebugInfo) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = DarkCardBg),
+        shape = RoundedCornerShape(10.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Subject-Aware Enhancement Diagnostics",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    color = CyberCyan
+                )
+                Text(
+                    text = debugInfo.detectionEngine,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = NeonEmerald
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            ParamLine("Original Subject Luminance", "${String.format("%.2f", debugInfo.originalSubjectLuminance)}%")
+            ParamLine("Enhanced Subject Luminance", "${String.format("%.2f", debugInfo.enhancedSubjectLuminance)}%")
+            ParamLine("Original BG Luminance", "${String.format("%.2f", debugInfo.originalBackgroundLuminance)}%")
+            ParamLine("Enhanced BG Luminance", "${String.format("%.2f", debugInfo.enhancedBackgroundLuminance)}%")
+            ParamLine("Subject/BG Ratio Before", String.format("%.2f", debugInfo.subjectBackgroundRatioBefore))
+            ParamLine("Subject/BG Ratio After", String.format("%.2f", debugInfo.subjectBackgroundRatioAfter))
+            ParamLine("Exposure Adjustment", String.format("%+.2f EV", debugInfo.exposureAdjustment))
+            ParamLine("Shadow Recovery Strength", "${(debugInfo.shadowRecoveryStrength * 100).toInt()}%")
+            ParamLine("Highlight Protection Strength", "${(debugInfo.highlightProtectionStrength * 100).toInt()}%")
+            ParamLine("Saturation Adjustment", "${(debugInfo.saturationAdjustment * 100).toInt()}%")
+            ParamLine("Contrast Adjustment", String.format("%.2fx", debugInfo.contrastAdjustment))
+            ParamLine("Sharpening Strength", "${(debugInfo.sharpeningStrength * 100).toInt()}%")
+            ParamLine("Enhancement Profile", debugInfo.enhancementProfile)
+            ParamLine("Detection Confidence", "${(debugInfo.detectionConfidence * 100).toInt()}%")
+            ParamLine("Final Output Resolution", debugInfo.finalOutputResolution)
+        }
+    }
+}
+
+@Composable
+private fun ParamLine(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+        Text(value, style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold), color = PureWhite)
+    }
+}
+
+/**
+ * Objective Photo Quality Metrics Comparison Card (Requirement 3).
+ */
+@Composable
+private fun ObjectiveQualityMetricsCard(
+    metricsA: com.example.model.ObjectivePhotoQualityMetrics,
+    metricsB: com.example.model.ObjectivePhotoQualityMetrics
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = DarkCardBg),
+        shape = RoundedCornerShape(10.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                text = "Objective Photo Quality Metrics (AUTO vs SMART)",
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                color = ElectricGold
+            )
+
+            // Header
+            Row(modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp)) {
+                Text("Metric", modifier = Modifier.weight(1.4f), style = MaterialTheme.typography.labelSmall, color = TextTertiary)
+                Text("AUTO", modifier = Modifier.weight(1f), textAlign = TextAlign.End, style = MaterialTheme.typography.labelSmall, color = TextTertiary)
+                Text("SMART", modifier = Modifier.weight(1f), textAlign = TextAlign.End, style = MaterialTheme.typography.labelSmall, color = TextTertiary)
+                Text("Change", modifier = Modifier.weight(1.1f), textAlign = TextAlign.End, style = MaterialTheme.typography.labelSmall, color = TextTertiary)
+            }
+
+            ObjectiveMetricComparisonRow("Resolution", metricsA.resolution, metricsB.resolution, "Native", true)
+            ObjectiveMetricComparisonRow("Sharpness (Laplacian)", String.format("%.1f", metricsA.sharpnessLaplacianVar), String.format("%.1f", metricsB.sharpnessLaplacianVar), String.format("%+.1f", metricsB.sharpnessLaplacianVar - metricsA.sharpnessLaplacianVar), metricsB.sharpnessLaplacianVar >= metricsA.sharpnessLaplacianVar)
+            ObjectiveMetricComparisonRow("Highlight Clip %", "${String.format("%.2f", metricsA.highlightClippingPct)}%", "${String.format("%.2f", metricsB.highlightClippingPct)}%", String.format("%+.2f%%", metricsB.highlightClippingPct - metricsA.highlightClippingPct), metricsB.highlightClippingPct <= metricsA.highlightClippingPct + 0.5f)
+            ObjectiveMetricComparisonRow("Shadow Clip %", "${String.format("%.2f", metricsA.shadowClippingPct)}%", "${String.format("%.2f", metricsB.shadowClippingPct)}%", String.format("%+.2f%%", metricsB.shadowClippingPct - metricsA.shadowClippingPct), metricsB.shadowClippingPct <= metricsA.shadowClippingPct)
+            ObjectiveMetricComparisonRow("RMS Contrast", String.format("%.1f", metricsA.rmsContrast), String.format("%.1f", metricsB.rmsContrast), String.format("%+.1f", metricsB.rmsContrast - metricsA.rmsContrast), true)
+            ObjectiveMetricComparisonRow("Average Luma", "${String.format("%.1f", metricsA.averageLuminance)}%", "${String.format("%.1f", metricsB.averageLuminance)}%", String.format("%+.1f%%", metricsB.averageLuminance - metricsA.averageLuminance), null)
+            ObjectiveMetricComparisonRow("Subject Luma", "${String.format("%.1f", metricsA.subjectLuminance)}%", "${String.format("%.1f", metricsB.subjectLuminance)}%", String.format("%+.1f%%", metricsB.subjectLuminance - metricsA.subjectLuminance), metricsB.subjectLuminance >= metricsA.subjectLuminance)
+            ObjectiveMetricComparisonRow("BG Luma", "${String.format("%.1f", metricsA.backgroundLuminance)}%", "${String.format("%.1f", metricsB.backgroundLuminance)}%", String.format("%+.1f%%", metricsB.backgroundLuminance - metricsA.backgroundLuminance), null)
+            ObjectiveMetricComparisonRow("Subject/BG Ratio", String.format("%.2f", metricsA.subjectBackgroundLuminanceRatio), String.format("%.2f", metricsB.subjectBackgroundLuminanceRatio), String.format("%+.2f", metricsB.subjectBackgroundLuminanceRatio - metricsA.subjectBackgroundLuminanceRatio), metricsB.subjectBackgroundLuminanceRatio >= metricsA.subjectBackgroundLuminanceRatio)
+            ObjectiveMetricComparisonRow("Saturation", "${String.format("%.1f", metricsA.saturation)}%", "${String.format("%.1f", metricsB.saturation)}%", String.format("%+.1f%%", metricsB.saturation - metricsA.saturation), metricsB.saturation >= metricsA.saturation)
+            ObjectiveMetricComparisonRow("Noise Est.", String.format("%.1f", metricsA.noiseEstimate), String.format("%.1f", metricsB.noiseEstimate), String.format("%+.1f", metricsB.noiseEstimate - metricsA.noiseEstimate), metricsB.noiseEstimate <= metricsA.noiseEstimate * 1.3f)
+        }
+    }
+}
+
+@Composable
+private fun ObjectiveMetricComparisonRow(
+    name: String,
+    valA: String,
+    valB: String,
+    diff: String,
+    isBetter: Boolean?
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(name, modifier = Modifier.weight(1.4f), style = MaterialTheme.typography.bodySmall, color = TextPrimary)
+        Text(valA, modifier = Modifier.weight(1f), textAlign = TextAlign.End, style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace), color = TextSecondary)
+        Text(valB, modifier = Modifier.weight(1f), textAlign = TextAlign.End, style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace), color = CyberCyan)
+        Text(
+            text = diff,
+            modifier = Modifier.weight(1.1f),
+            textAlign = TextAlign.End,
+            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace),
+            color = when (isBetter) {
+                true -> NeonEmerald
+                false -> HighAlertRed
+                null -> ElectricGold
+            }
+        )
     }
 }

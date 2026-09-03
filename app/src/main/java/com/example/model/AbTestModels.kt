@@ -97,7 +97,10 @@ data class AbCaptureSession(
     val recommendation: CameraRecommendation,
     val fallbackSettings: Map<String, String>,
     val processingProfile: ImageProcessingProfileType,
-    val appliedCalibrationSummary: String = "Generic Baseline"
+    val appliedCalibrationSummary: String = "Generic Baseline",
+    val photoA_ObjectiveMetrics: ObjectivePhotoQualityMetrics? = null,
+    val photoB_ObjectiveMetrics: ObjectivePhotoQualityMetrics? = null,
+    val subjectDebugInfo: SubjectEnhancementDebugInfo? = null
 ) {
     fun toJsonObject(): JSONObject {
         val json = JSONObject()

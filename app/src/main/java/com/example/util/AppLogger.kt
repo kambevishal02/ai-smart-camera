@@ -37,10 +37,22 @@ object AppLogger {
     val logs: StateFlow<List<LogEntry>> = _logs.asStateFlow()
 
     private const val MAX_LOGS = 250
+    private var lastLoggedKey: String = ""
+    private var lastLoggedTimestamp: Long = 0L
 
     @Synchronized
     fun addLog(category: String, message: String, level: String = "INFO") {
-        val timeStr = dateFormat.format(Date())
+        val now = System.currentTimeMillis()
+        val key = "$category:$message"
+
+        // Deduplicate identical log messages within 2.5 seconds to protect system audit buffers
+        if (key == lastLoggedKey && now - lastLoggedTimestamp < 2500L) {
+            return
+        }
+        lastLoggedKey = key
+        lastLoggedTimestamp = now
+
+        val timeStr = dateFormat.format(Date(now))
         val entry = LogEntry(timeStr, category, message, level)
         val current = _logs.value.toMutableList()
         if (current.size >= MAX_LOGS) {
