@@ -23,6 +23,7 @@ import androidx.lifecycle.LifecycleOwner
 import com.example.ai.CameraDecisionEngine
 import com.example.ai.ISceneAnalyzer
 import com.example.ai.SceneAnalyzer
+import com.example.model.AbCaptureSession
 import com.example.model.CameraCapabilities
 import com.example.model.CameraHardwareInfo
 import com.example.model.CameraRecommendation
@@ -33,6 +34,7 @@ import com.example.model.FrameAnalysisResult
 import com.example.model.ImageProcessingProfileType
 import com.example.model.SceneType
 import com.example.model.SmartCaptureStatus
+import com.example.model.TestSceneType
 import com.example.processing.IImageProcessor
 import com.example.processing.LightweightImageEnhancer
 import com.example.util.AppLogger
@@ -126,6 +128,15 @@ class CameraXController(
 
     private val _manualProfileOverride = MutableStateFlow<ImageProcessingProfileType?>(null)
     override val manualProfileOverride: StateFlow<ImageProcessingProfileType?> = _manualProfileOverride.asStateFlow()
+
+    private val _isAbTestModeEnabled = MutableStateFlow(false)
+    override val isAbTestModeEnabled: StateFlow<Boolean> = _isAbTestModeEnabled.asStateFlow()
+
+    private val _selectedTestScene = MutableStateFlow<TestSceneType>(TestSceneType.DAYLIGHT)
+    override val selectedTestScene: StateFlow<TestSceneType> = _selectedTestScene.asStateFlow()
+
+    private val _lastAbCaptureSession = MutableStateFlow<AbCaptureSession?>(null)
+    override val lastAbCaptureSession: StateFlow<AbCaptureSession?> = _lastAbCaptureSession.asStateFlow()
 
     // Analysis throttling control
     private var lastAnalysisTimestamp = 0L
@@ -326,6 +337,16 @@ class CameraXController(
         AppLogger.addLog("PROCESSING", "Manual profile override: ${profile?.displayName ?: "Auto AI Selected"}")
     }
 
+    override fun setAbTestMode(enabled: Boolean) {
+        _isAbTestModeEnabled.value = enabled
+        AppLogger.addLog("AB_TEST", "A/B Testing Mode set to: ${if (enabled) "ENABLED" else "DISABLED"}")
+    }
+
+    override fun setSelectedTestScene(scene: TestSceneType) {
+        _selectedTestScene.value = scene
+        AppLogger.addLog("AB_TEST", "Selected test scene for A/B: ${scene.displayName}")
+    }
+
     override fun focusOnPoint(xNorm: Float, yNorm: Float, previewView: PreviewView) {
         try {
             val factory = previewView.meteringPointFactory
@@ -363,6 +384,28 @@ class CameraXController(
             onSuccess = { photo ->
                 _lastCapturedPhoto.value = photo
                 onSuccess(photo)
+            },
+            onError = onError
+        )
+    }
+
+    override fun captureAbTest(
+        testScene: TestSceneType,
+        onSuccess: (AbCaptureSession) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        smartCaptureController.captureAbTest(
+            imageCapture = imageCapture,
+            cameraControl = cameraControl,
+            cameraInfo = cameraInfo,
+            capabilities = _cameraHardwareInfo.value,
+            currentAnalysis = _analysisResult.value,
+            testScene = testScene,
+            isFrontCamera = _isFrontCamera.value,
+            scope = scope,
+            onSuccess = { session ->
+                _lastAbCaptureSession.value = session
+                onSuccess(session)
             },
             onError = onError
         )

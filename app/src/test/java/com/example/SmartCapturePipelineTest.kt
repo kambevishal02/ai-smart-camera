@@ -51,7 +51,7 @@ class SmartCapturePipelineTest {
             SceneType.NIGHT to ImageProcessingProfileType.NIGHT,
             SceneType.BEACH to ImageProcessingProfileType.BEACH,
             SceneType.SUNSET to ImageProcessingProfileType.SUNSET,
-            SceneType.FOREST_NATURE to ImageProcessingProfileType.LANDSCAPE,
+            SceneType.FOREST_NATURE to ImageProcessingProfileType.FOREST,
             SceneType.FOOD to ImageProcessingProfileType.FOOD,
             SceneType.ARCHITECTURE to ImageProcessingProfileType.ARCHITECTURE,
             SceneType.INDOOR to ImageProcessingProfileType.NATURAL
@@ -100,8 +100,8 @@ class SmartCapturePipelineTest {
     @Test
     fun `test enhancement parameters defaults for conservative enhancement`() {
         val portraitParams = EnhancementParameters.defaultForProfile(ImageProcessingProfileType.PORTRAIT)
-        assertTrue(portraitParams.skinTonePreservation > 0.5f)
-        assertTrue(portraitParams.saturationBoost in 1.0f..1.1f) // never over-saturated
+        assertTrue(portraitParams.warmTint > 0.05f)
+        assertTrue(portraitParams.saturationMultiplier in 1.0f..1.1f) // never over-saturated
 
         val nightParams = EnhancementParameters.defaultForProfile(ImageProcessingProfileType.NIGHT)
         assertTrue(nightParams.shadowLift > 0.15f)
@@ -110,10 +110,11 @@ class SmartCapturePipelineTest {
 
     @Test
     fun `test smart capture status labels`() {
-        assertEquals("ANALYZING SCENE...", SmartCaptureStatus.ANALYZING.label)
-        assertEquals("AI OPTIMIZED • READY", SmartCaptureStatus.READY.label)
-        assertEquals("CAPTURING...", SmartCaptureStatus.CAPTURING.label)
-        assertEquals("ENHANCING PHOTO...", SmartCaptureStatus.PROCESSING.label)
+        assertEquals("ANALYZING", SmartCaptureStatus.ANALYZING.label)
+        assertEquals("READY", SmartCaptureStatus.READY.label)
+        assertEquals("CAPTURING", SmartCaptureStatus.CAPTURING.label)
+        assertEquals("A/B CAPTURING (1/2)", SmartCaptureStatus.AB_TESTING.label)
+        assertEquals("PROCESSING", SmartCaptureStatus.PROCESSING.label)
         assertEquals("PHOTO SAVED", SmartCaptureStatus.SAVED.label)
     }
 }

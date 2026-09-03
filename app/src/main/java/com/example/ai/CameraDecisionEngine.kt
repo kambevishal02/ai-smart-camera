@@ -6,6 +6,8 @@ import com.example.model.CameraRecommendation
 import com.example.model.EnhancementParameters
 import com.example.model.FlashRecommendation
 import com.example.model.FocusStrategy
+import com.example.model.CaptureIntent
+import com.example.model.HighlightProtectionLevel
 import com.example.model.ImageProcessingProfileType
 import com.example.model.IsoPreference
 import com.example.model.LightingAnalysis
@@ -20,16 +22,18 @@ import com.example.model.WhiteBalanceRecommendation
 import kotlin.math.roundToInt
 
 /**
- * Intelligent Smart Camera Decision Engine.
+ * Intelligent Smart Camera Decision Engine (V0.4).
  *
- * Takes scene metrics, lighting conditions, subject composition, and hardware capabilities
- * to compute optimal camera control recommendations and post-capture image enhancement parameters.
+ * Coordinates scene analysis, subject detection, and the V0.4 SmartExposureEngine
+ * to formulate optimal CaptureIntent and CameraRecommendation.
  *
  * CRITICAL DIRECTIVE:
  * Strictly verifies CameraCapabilities before recommending manual controls.
  * Falls back to AUTO ISO, AUTO Shutter, and AUTO AWB whenever manual control is unsupported.
  */
-class CameraDecisionEngine {
+class CameraDecisionEngine(
+    val smartExposureEngine: SmartExposureEngine = SmartExposureEngine()
+) {
 
     /**
      * Evaluates full scene analysis against device camera hardware capabilities.
@@ -38,6 +42,12 @@ class CameraDecisionEngine {
         analysis: SceneAnalysis,
         capabilities: CameraCapabilities
     ): CameraRecommendation {
+        // Run V0.4 SmartExposureEngine to derive abstract CaptureIntent
+        val captureIntent = smartExposureEngine.evaluateCaptureIntent(
+            analysis = analysis,
+            capabilities = capabilities
+        )
+
         return evaluate(
             scene = analysis.scene,
             lighting = analysis.lighting,
@@ -46,7 +56,8 @@ class CameraDecisionEngine {
             sharpness = analysis.sharpnessMetric,
             estimatedKelvin = analysis.estimatedKelvin,
             confidence = analysis.confidence,
-            capabilities = capabilities
+            capabilities = capabilities,
+            precomputedIntent = captureIntent
         )
     }
 
@@ -61,7 +72,8 @@ class CameraDecisionEngine {
         sharpness: Float,
         estimatedKelvin: Int,
         confidence: Float,
-        capabilities: CameraCapabilities
+        capabilities: CameraCapabilities,
+        precomputedIntent: CaptureIntent? = null
     ): CameraRecommendation {
         // 1. Determine Image Processing Profile based on Scene
         val profile = when (scene) {
@@ -180,6 +192,19 @@ class CameraDecisionEngine {
         val baseEnhancement = EnhancementParameters.defaultForProfile(profile)
         val tunedEnhancement = tuneEnhancementParameters(baseEnhancement, scene, lighting, motion, sharpness)
 
+        val resolvedIntent = precomputedIntent ?: smartExposureEngine.evaluateCaptureIntent(
+            analysis = SceneAnalysis(
+                scene = scene,
+                lighting = lighting,
+                subject = subject,
+                motion = motion,
+                sharpnessMetric = sharpness,
+                estimatedKelvin = estimatedKelvin,
+                confidence = confidence
+            ),
+            capabilities = capabilities
+        )
+
         return CameraRecommendation(
             exposureCompensationIndex = calculatedEvIndex,
             exposureCompensationEv = clampedEv,
@@ -197,7 +222,8 @@ class CameraDecisionEngine {
             recommendedLens = recommendedLensName,
             primaryActionText = actionText,
             secondaryReasonText = reasonText,
-            confidence = confidence
+            confidence = confidence,
+            captureIntent = resolvedIntent
         )
     }
 

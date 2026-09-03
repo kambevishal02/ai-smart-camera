@@ -144,7 +144,7 @@ object CalibrationProfilesRepository {
         }
 
         // 2. Legacy or limited devices
-        if (hardwareLevel == DeviceCapabilityLevel.LEGACY) {
+        if (hardwareLevel == DeviceCapabilityLevel.MINIMAL) {
             return MODEL_B_BUDGET
         }
 

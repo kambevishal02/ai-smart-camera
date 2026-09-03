@@ -34,6 +34,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Cameraswitch
+import androidx.compose.material.icons.filled.Compare
 import androidx.compose.material.icons.filled.FlashAuto
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
@@ -75,22 +76,26 @@ import com.example.model.DetectedFace
 import com.example.model.FlashRecommendation
 import com.example.model.ImageProcessingProfileType
 import com.example.model.SmartCaptureStatus
+import com.example.model.TestSceneType
 import com.example.ui.theme.CrimsonAlert
 import com.example.ui.theme.CyberCyan
 import com.example.ui.theme.DarkSurfaceBorder
 import com.example.ui.theme.DarkSurfaceGlass
 import com.example.ui.theme.ElectricGold
 import com.example.ui.theme.EmeraldSuccess
+import com.example.ui.theme.NeonEmerald
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 
 /**
- * Mode selector switcher between SMART AUTO (AI scene + optimization) and AUTO (standard camera behavior).
+ * Mode selector switcher between SMART AUTO (AI scene + optimization), AUTO (standard camera behavior),
+ * and A/B TEST (V0.3 dual comparative evaluation).
  */
 @Composable
 fun SmartAutoModeSwitcher(
     isSmartAuto: Boolean,
-    onModeChanged: (Boolean) -> Unit,
+    isAbTest: Boolean = false,
+    onSelectMode: (isSmartAuto: Boolean, isAbTest: Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -105,12 +110,13 @@ fun SmartAutoModeSwitcher(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // SMART AUTO pill
+            val isSmartActive = isSmartAuto && !isAbTest
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(20.dp))
-                    .background(if (isSmartAuto) CyberCyan else Color.Transparent)
-                    .clickable { onModeChanged(true) }
-                    .padding(horizontal = 14.dp, vertical = 6.dp)
+                    .background(if (isSmartActive) CyberCyan else Color.Transparent)
+                    .clickable { onSelectMode(true, false) }
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
                     .testTag("mode_smart_auto"),
                 contentAlignment = Alignment.Center
             ) {
@@ -121,28 +127,29 @@ fun SmartAutoModeSwitcher(
                     Icon(
                         imageVector = Icons.Default.AutoAwesome,
                         contentDescription = "Smart Auto",
-                        tint = if (isSmartAuto) Color.Black else TextSecondary,
+                        tint = if (isSmartActive) Color.Black else TextSecondary,
                         modifier = Modifier.size(13.dp)
                     )
                     Text(
                         text = "SMART AUTO",
                         style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = if (isSmartAuto) FontWeight.ExtraBold else FontWeight.Normal,
+                            fontWeight = if (isSmartActive) FontWeight.ExtraBold else FontWeight.Normal,
                             fontSize = 11.sp,
                             letterSpacing = 0.5.sp
                         ),
-                        color = if (isSmartAuto) Color.Black else TextSecondary
+                        color = if (isSmartActive) Color.Black else TextSecondary
                     )
                 }
             }
 
             // STANDARD AUTO pill
+            val isAutoActive = !isSmartAuto && !isAbTest
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(20.dp))
-                    .background(if (!isSmartAuto) ElectricGold else Color.Transparent)
-                    .clickable { onModeChanged(false) }
-                    .padding(horizontal = 14.dp, vertical = 6.dp)
+                    .background(if (isAutoActive) ElectricGold else Color.Transparent)
+                    .clickable { onSelectMode(false, false) }
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
                     .testTag("mode_standard_auto"),
                 contentAlignment = Alignment.Center
             ) {
@@ -153,19 +160,114 @@ fun SmartAutoModeSwitcher(
                     Icon(
                         imageVector = Icons.Default.PhotoCamera,
                         contentDescription = "Standard Auto",
-                        tint = if (!isSmartAuto) Color.Black else TextSecondary,
+                        tint = if (isAutoActive) Color.Black else TextSecondary,
                         modifier = Modifier.size(13.dp)
                     )
                     Text(
                         text = "AUTO",
                         style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = if (!isSmartAuto) FontWeight.ExtraBold else FontWeight.Normal,
+                            fontWeight = if (isAutoActive) FontWeight.ExtraBold else FontWeight.Normal,
                             fontSize = 11.sp,
                             letterSpacing = 0.5.sp
                         ),
-                        color = if (!isSmartAuto) Color.Black else TextSecondary
+                        color = if (isAutoActive) Color.Black else TextSecondary
                     )
                 }
+            }
+
+            // A/B TEST pill (Requirement 2 & 3)
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(if (isAbTest) NeonEmerald else Color.Transparent)
+                    .clickable { onSelectMode(true, true) }
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .testTag("mode_ab_test"),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Compare,
+                        contentDescription = "A/B Test",
+                        tint = if (isAbTest) Color.Black else TextSecondary,
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Text(
+                        text = "A/B TEST",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = if (isAbTest) FontWeight.ExtraBold else FontWeight.Normal,
+                            fontSize = 11.sp,
+                            letterSpacing = 0.5.sp
+                        ),
+                        color = if (isAbTest) Color.Black else TextSecondary
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Backward-compatible overload for SmartAutoModeSwitcher.
+ */
+@Composable
+fun SmartAutoModeSwitcher(
+    isSmartAuto: Boolean,
+    onModeChanged: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    SmartAutoModeSwitcher(
+        isSmartAuto = isSmartAuto,
+        isAbTest = false,
+        onSelectMode = { smart, _ -> onModeChanged(smart) },
+        modifier = modifier
+    )
+}
+
+/**
+ * Standard test scene selector row for A/B Testing Studio (Requirement 2 & 3).
+ * Allows developers to choose among the 11 standardized test scenes directly in the camera viewfinder.
+ */
+@Composable
+fun TestSceneSelectorRow(
+    selectedScene: TestSceneType,
+    onSelectScene: (TestSceneType) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TestSceneType.values().forEach { scene ->
+            val isSelected = selectedScene == scene
+            Surface(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(16.dp))
+                    .clickable { onSelectScene(scene) }
+                    .testTag("test_scene_${scene.name.lowercase()}"),
+                color = if (isSelected) NeonEmerald.copy(alpha = 0.25f) else DarkSurfaceGlass,
+                border = BorderStroke(
+                    1.dp,
+                    if (isSelected) NeonEmerald else Color(0x33FFFFFF)
+                ),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Text(
+                    text = scene.displayName,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        fontSize = 11.sp
+                    ),
+                    color = if (isSelected) NeonEmerald else TextSecondary,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                )
             }
         }
     }

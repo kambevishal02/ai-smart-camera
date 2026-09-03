@@ -52,14 +52,14 @@ class CameraDecisionEngineTest {
     }
 
     @Test
-    fun `forest nature scene selects landscape profile and cloudy white balance`() {
+    fun `forest nature scene selects forest profile and cloudy white balance`() {
         val analysis = SceneAnalysis.INITIAL.copy(
             scene = SceneType.FOREST_NATURE,
             greenVegetationRatio = 0.50f
         )
 
         val rec = engine.evaluate(analysis, genericHardware)
-        assertEquals(ImageProcessingProfileType.LANDSCAPE, rec.imageProcessingProfile)
+        assertEquals(ImageProcessingProfileType.FOREST, rec.imageProcessingProfile)
         assertEquals(WhiteBalanceRecommendation.CLOUDY, rec.whiteBalance)
     }
 

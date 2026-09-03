@@ -44,5 +44,6 @@ data class CameraRecommendation(
     val recommendedLens: String = "Main Wide Lens",
     val primaryActionText: String = "Optimizing scene exposure",
     val secondaryReasonText: String = "Standard balanced profile applied",
-    val confidence: Float = 0.9f
+    val confidence: Float = 0.9f,
+    val captureIntent: CaptureIntent = CaptureIntent.DEFAULT
 )

@@ -43,9 +43,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.camera.ICameraController
+import com.example.model.AbCaptureSession
 import com.example.model.CapturedPhoto
 import com.example.model.ImageProcessingProfileType
 import com.example.model.SmartCaptureStatus
+import com.example.model.TestSceneType
+import com.example.ui.components.AbComparisonDialog
 import com.example.ui.components.AiPhotoScoreBadge
 import com.example.ui.components.AiStatusPanel
 import com.example.ui.components.CameraFlipButton
@@ -58,6 +61,7 @@ import com.example.ui.components.RuleOfThirdsGrid
 import com.example.ui.components.ShutterButton
 import com.example.ui.components.SmartAutoModeSwitcher
 import com.example.ui.components.SmartCaptureStatusIndicator
+import com.example.ui.components.TestSceneSelectorRow
 import com.example.ui.theme.DarkSurfaceElevated
 import com.example.util.AppLogger
 
@@ -82,10 +86,14 @@ fun CameraScreen(
     val evIndex by cameraController.exposureCompensationIndex.collectAsState()
     val isAiAuto by cameraController.isAiAutoModeEnabled.collectAsState()
     val manualProfile by cameraController.manualProfileOverride.collectAsState()
+    val isAbTest by cameraController.isAbTestModeEnabled.collectAsState()
+    val selectedTestScene by cameraController.selectedTestScene.collectAsState()
+    val lastAbSession by cameraController.lastAbCaptureSession.collectAsState()
 
     var isGridOn by remember { mutableStateOf(false) }
     var previewViewInstance by remember { mutableStateOf<PreviewView?>(null) }
     var viewingPhoto by remember { mutableStateOf<CapturedPhoto?>(null) }
+    var viewingAbSession by remember { mutableStateOf<AbCaptureSession?>(null) }
     var showLogsSheet by remember { mutableStateOf(false) }
 
     val logsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -219,31 +227,42 @@ fun CameraScreen(
                 .padding(bottom = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Prominent SMART AUTO vs AUTO Switcher (Requirement 1 & 4)
+            // Prominent SMART AUTO vs AUTO vs A/B TEST Switcher (Requirement 1, 2, 4)
             SmartAutoModeSwitcher(
                 isSmartAuto = isAiAuto,
-                onModeChanged = { enabled ->
-                    cameraController.setAiAutoMode(enabled)
-                    if (enabled) {
-                        cameraController.setManualProfile(null)
+                isAbTest = isAbTest,
+                onSelectMode = { smart, ab ->
+                    cameraController.setAbTestMode(ab)
+                    if (!ab) {
+                        cameraController.setAiAutoMode(smart)
+                        if (smart) {
+                            cameraController.setManualProfile(null)
+                        }
                     }
                 }
             )
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Scene Profile Horizontal Pill Selector
-            ProfileSelectorRow(
-                activeProfile = recommendation.imageProcessingProfile,
-                manualOverride = manualProfile,
-                isAiAuto = isAiAuto,
-                onSelectProfile = { profile ->
-                    cameraController.setManualProfile(profile)
-                    if (profile != null) {
-                        cameraController.setAiAutoMode(false)
+            // Scene Profile / Test Scene Selector
+            if (isAbTest) {
+                TestSceneSelectorRow(
+                    selectedScene = selectedTestScene,
+                    onSelectScene = { cameraController.setSelectedTestScene(it) }
+                )
+            } else {
+                ProfileSelectorRow(
+                    activeProfile = recommendation.imageProcessingProfile,
+                    manualOverride = manualProfile,
+                    isAiAuto = isAiAuto,
+                    onSelectProfile = { profile ->
+                        cameraController.setManualProfile(profile)
+                        if (profile != null) {
+                            cameraController.setAiAutoMode(false)
+                        }
                     }
-                }
-            )
+                )
+            }
 
             Spacer(modifier = Modifier.height(14.dp))
 
@@ -255,11 +274,15 @@ fun CameraScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Last Captured Thumbnail
+                // Last Captured Thumbnail / A/B Review Button
                 GalleryThumbnailButton(
                     lastPhoto = lastPhoto,
                     onClick = {
-                        lastPhoto?.let { viewingPhoto = it }
+                        if (isAbTest && lastAbSession != null) {
+                            viewingAbSession = lastAbSession
+                        } else {
+                            lastPhoto?.let { viewingPhoto = it }
+                        }
                     }
                 )
 
@@ -267,16 +290,28 @@ fun CameraScreen(
                 ShutterButton(
                     isCapturing = isCapturing,
                     isProcessing = isProcessing,
-                    isSmartAuto = isAiAuto,
+                    isSmartAuto = isAiAuto || isAbTest,
                     onClick = {
-                        cameraController.capturePhoto(
-                            onSuccess = { photo ->
-                                viewingPhoto = photo
-                            },
-                            onError = { err ->
-                                Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
-                            }
-                        )
+                        if (isAbTest) {
+                            cameraController.captureAbTest(
+                                testScene = selectedTestScene,
+                                onSuccess = { session ->
+                                    viewingAbSession = session
+                                },
+                                onError = { err ->
+                                    Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        } else {
+                            cameraController.capturePhoto(
+                                onSuccess = { photo ->
+                                    viewingPhoto = photo
+                                },
+                                onError = { err ->
+                                    Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        }
                     }
                 )
 
@@ -292,6 +327,18 @@ fun CameraScreen(
             PhotoComparisonDialog(
                 photo = photo,
                 onDismiss = { viewingPhoto = null }
+            )
+        }
+
+        // 9b. A/B Capture Comparison Dialog (Requirement 3, 5, 6, 7)
+        viewingAbSession?.let { session ->
+            AbComparisonDialog(
+                session = session,
+                onDismiss = { viewingAbSession = null },
+                onOpenCalibration = {
+                    viewingAbSession = null
+                    onNavigateToDebug()
+                }
             )
         }
 

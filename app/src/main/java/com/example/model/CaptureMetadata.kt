@@ -29,7 +29,14 @@ data class CaptureMetadata(
     val appliedSettings: Map<String, String>,
     val processingProfile: ImageProcessingProfileType,
     val qualityScore: Int,
-    val qualityBreakdown: Map<String, Int>
+    val qualityBreakdown: Map<String, Int>,
+    val highlightProtection: String = "NONE",
+    val shadowStrategy: String = "Balanced",
+    val facePriorityMode: String = "None",
+    val targetEv: Float = 0.0f,
+    val hardwareRequestedSettings: Map<String, String> = emptyMap(),
+    val hardwareFallbackSettings: Map<String, String> = emptyMap(),
+    val decisionReasoning: String = "Standard balanced exposure"
 ) {
     fun toFormattedLog(): String {
         return buildString {
@@ -38,9 +45,16 @@ data class CaptureMetadata(
             appendLine("Scene: ${scene.displayName} (Engine: $sceneDetectionType)")
             appendLine("Lighting: ${lighting.label} (Luma: ${String.format("%.1f", brightnessLuma)}%)")
             appendLine("Subject: $faceCount Faces Detected | Motion: ${motionLevel.label}")
+            appendLine("Highlight Protection: $highlightProtection | Shadow Strategy: $shadowStrategy")
+            appendLine("Face Priority: $facePriorityMode | Target EV: ${String.format("%+.2f", targetEv)}")
+            appendLine("Decision Rationale: $decisionReasoning")
             appendLine("Profile Applied: ${processingProfile.displayName}")
             appendLine("Applied Settings:")
             appliedSettings.forEach { (k, v) -> appendLine("  • $k: $v") }
+            if (hardwareFallbackSettings.isNotEmpty()) {
+                appendLine("Hardware Fallbacks / Graceful Defaults:")
+                hardwareFallbackSettings.forEach { (k, v) -> appendLine("  ⚠ $k: $v") }
+            }
             appendLine("Photo Quality Score: $qualityScore / 100")
             qualityBreakdown.forEach { (metric, score) -> appendLine("  • $metric: $score/100") }
         }

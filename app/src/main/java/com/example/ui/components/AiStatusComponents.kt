@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Camera
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Compare
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Stars
@@ -94,6 +95,7 @@ fun SmartCaptureStatusIndicator(
         SmartCaptureStatus.ANALYZING -> CyberCyan
         SmartCaptureStatus.READY -> EmeraldSuccess
         SmartCaptureStatus.CAPTURING -> ElectricGold
+        SmartCaptureStatus.AB_TESTING -> ElectricGold
         SmartCaptureStatus.PROCESSING -> CyberCyan
         SmartCaptureStatus.SAVED -> EmeraldSuccess
     }
@@ -102,6 +104,7 @@ fun SmartCaptureStatusIndicator(
         SmartCaptureStatus.ANALYZING -> Icons.Default.Search
         SmartCaptureStatus.READY -> Icons.Default.CheckCircle
         SmartCaptureStatus.CAPTURING -> Icons.Default.Camera
+        SmartCaptureStatus.AB_TESTING -> Icons.Default.Compare
         SmartCaptureStatus.PROCESSING -> Icons.Default.AutoAwesome
         SmartCaptureStatus.SAVED -> Icons.Default.DoneAll
     }

@@ -197,11 +197,19 @@ object AbTestStore {
         _testedScenes.value = emptySet()
     }
 
+    fun clearHistory() {
+        clear()
+    }
+
     fun isSceneTested(scene: TestSceneType): Boolean {
         return _testedScenes.value.contains(scene)
     }
 
     fun getTestedCount(): Int = _testedScenes.value.size
+
+    fun exportToJson(): String = exportToJsonReport()
+
+    fun exportToCsv(): String = exportToCsvReport()
 
     /**
      * Exports all A/B test sessions as a structured JSON report.

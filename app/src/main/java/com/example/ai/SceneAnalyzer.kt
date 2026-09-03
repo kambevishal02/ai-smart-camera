@@ -169,7 +169,7 @@ class SceneAnalyzer(
         // 1. Run LightingAnalyzer
         val lightingAnalysis = lightingAnalyzer.analyze(lumaSamples, validSamples)
 
-        // 2. Run SubjectAnalyzer (Real ML Kit Face Detection + skin cluster fallback)
+        // 2. Run SubjectAnalyzer (Real ML Kit Face Detection + skin cluster fallback + face exposure metrics)
         val subjectAnalysis = subjectAnalyzer.analyzeWithFrame(
             imageProxy = imageProxy,
             skinPixelCount = skinCount,
@@ -177,7 +177,9 @@ class SceneAnalyzer(
             minSkinX = minSkinX,
             maxSkinX = maxSkinX,
             minSkinY = minSkinY,
-            maxSkinY = maxSkinY
+            maxSkinY = maxSkinY,
+            sceneLumaArray = currentLumaArray,
+            sceneMeanLuma = lightingAnalysis.brightness * 2.55f
         )
 
         // 3. Edge gradient variance for Sharpness and Architecture

@@ -11,6 +11,8 @@ import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.SurfaceOrientedMeteringPointFactory
+import com.example.ai.AdaptiveIntelligenceEngine
+import com.example.ai.AdaptiveProfileStore
 import com.example.ai.CalibrationEngine
 import com.example.ai.CameraDecisionEngine
 import com.example.ai.ImageTechnicalMetricCalculator
@@ -130,15 +132,19 @@ class SmartCaptureController(
                     )
                 }
 
-                // 2. Apply Supported Hardware Controls
+                // 2. Resolve CaptureIntent via CameraHardwareAdapter (requested vs. applied vs. fallbacks)
+                val resolvedSettings = CameraHardwareAdapter.resolveIntent(recommendation.captureIntent, capabilities)
+                val requestedSettingsMap = resolvedSettings.toRequestedMap()
+                val fallbackSettingsMap = resolvedSettings.toFallbackMap()
+
                 var needsStabilizationDelay = false
                 val appliedSettingsMap = mutableMapOf<String, String>()
 
                 if (cameraControl != null) {
                     if (isSmartAuto && capabilities.isEvCompensationSupported) {
-                        val targetEvIndex = recommendation.exposureCompensationIndex
+                        val targetEvIndex = resolvedSettings.appliedEvIndex
                         cameraControl.setExposureCompensationIndex(targetEvIndex)
-                        appliedSettingsMap["EV Index"] = "$targetEvIndex (${recommendation.exposureCompensationEv} EV)"
+                        appliedSettingsMap["EV Index"] = "$targetEvIndex (${resolvedSettings.appliedEvOffset} EV)"
                         if (targetEvIndex != 0) {
                             needsStabilizationDelay = true
                         }
@@ -161,16 +167,15 @@ class SmartCaptureController(
                         appliedSettingsMap["Focus/AE"] = "Center Area 3A Auto"
                     }
 
-                    if (isSmartAuto && recommendation.zoomRecommendation > 1.05f) {
-                        val targetZoom = recommendation.zoomRecommendation.coerceIn(capabilities.minZoomRatio, capabilities.maxZoomRatio)
-                        cameraControl.setZoomRatio(targetZoom)
-                        appliedSettingsMap["Zoom"] = "${String.format("%.1f", targetZoom)}x"
+                    if (isSmartAuto && resolvedSettings.appliedZoom > 1.05f) {
+                        cameraControl.setZoomRatio(resolvedSettings.appliedZoom)
+                        appliedSettingsMap["Zoom"] = "${String.format("%.1f", resolvedSettings.appliedZoom)}x"
                     } else {
                         appliedSettingsMap["Zoom"] = "1.0x"
                     }
                 }
 
-                val targetFlashMode = when (recommendation.flashRecommendation) {
+                val targetFlashMode = when (resolvedSettings.appliedFlash) {
                     FlashRecommendation.ON, FlashRecommendation.FILL_TORCH -> ImageCapture.FLASH_MODE_ON
                     FlashRecommendation.AUTO -> ImageCapture.FLASH_MODE_AUTO
                     FlashRecommendation.OFF -> ImageCapture.FLASH_MODE_OFF
@@ -235,6 +240,7 @@ class SmartCaptureController(
                 } else {
                     "HEURISTIC"
                 }
+                val intent = recommendation.captureIntent
                 val metadata = CaptureMetadata(
                     device = capabilities.deviceName,
                     cameraId = capabilities.activeCameraId,
@@ -256,7 +262,14 @@ class SmartCaptureController(
                         "Highlight Protection" to postQualityScore.highlightScore,
                         "Shadow Preservation" to postQualityScore.shadowScore,
                         "Dynamic Range" to postQualityScore.dynamicRangeScore
-                    )
+                    ),
+                    highlightProtection = intent.highlightProtection.label,
+                    shadowStrategy = intent.shadowPriority.label,
+                    facePriorityMode = intent.facePriority.label,
+                    targetEv = resolvedSettings.appliedEvOffset,
+                    hardwareRequestedSettings = requestedSettingsMap,
+                    hardwareFallbackSettings = fallbackSettingsMap,
+                    decisionReasoning = intent.reasoning
                 )
                 DeveloperMetadataStore.record(metadata)
 
@@ -419,7 +432,8 @@ class SmartCaptureController(
                 )
 
                 AbTestStore.recordSession(session)
-                AppLogger.i("SmartCaptureController", "A/B Test recorded for ${testScene.displayName}: Auto=${photoA_Metrics.totalTechnicalScore} vs Smart=${photoB_Metrics.totalTechnicalScore}")
+                val adaptiveEval = AdaptiveIntelligenceEngine.processAbCaptureSession(session, currentAnalysis)
+                AppLogger.i("SmartCaptureController", "A/B Test recorded for ${testScene.displayName}: Auto=${photoA_Metrics.totalTechnicalScore} vs Smart=${photoB_Metrics.totalTechnicalScore} | V0.5 Adaptive Eligible=${adaptiveEval.eligibleForLearning}")
 
                 withContext(Dispatchers.Main) {
                     _captureStatus.value = SmartCaptureStatus.SAVED

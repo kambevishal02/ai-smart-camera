@@ -29,11 +29,15 @@ data class LightingAnalysis(
 }
 
 /**
- * Detected human face details.
+ * Detected human face details with localized exposure and dynamic range analysis.
  */
 data class DetectedFace(
     val bounds: RectF, // Normalized 0.0 to 1.0 coordinates relative to frame
-    val confidence: Float = 0.9f
+    val confidence: Float = 0.9f,
+    val faceBrightness: Float = 50.0f,            // 0.0 to 100.0 luminance inside face bounding box
+    val faceExposureRelativeToScene: Float = 0.0f, // positive: brighter than scene, negative: darker than scene
+    val faceClipping: Float = 0.0f,                // % of face pixels clipping high (> 240)
+    val faceShadowLevel: Float = 0.0f              // % of face pixels clipping low (< 20)
 )
 
 /**
@@ -46,7 +50,11 @@ data class SubjectAnalysis(
     val approximateSubjectSize: String = "None", // "None", "Small", "Medium", "Large"
     val isLikelyPortrait: Boolean = false,
     val detectedFaces: List<DetectedFace> = emptyList(),
-    val skinRatio: Float = 0.0f
+    val skinRatio: Float = 0.0f,
+    val primaryFaceBrightness: Float = 50.0f,
+    val primaryFaceExposureRelativeToScene: Float = 0.0f,
+    val primaryFaceClipping: Float = 0.0f,
+    val primaryFaceShadowLevel: Float = 0.0f
 ) {
     companion object {
         val DEFAULT = SubjectAnalysis()

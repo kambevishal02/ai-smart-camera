@@ -8,6 +8,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -86,6 +88,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.content.Intent
+import com.example.ai.AdaptiveIntelligenceEngine
 import com.example.ai.CalibrationEngine
 import com.example.ai.CameraDecisionEngine
 import com.example.camera.CameraHardwareAdapter
@@ -104,6 +107,8 @@ import com.example.model.MotionLevel
 import com.example.model.PhotoQualityScore
 import com.example.model.SceneAnalysis
 import com.example.model.SceneType
+import com.example.model.SimulationScenario
+import com.example.model.SimulationScenariosProvider
 import com.example.model.SubjectAnalysis
 import com.example.model.TestSceneType
 import com.example.ui.components.AbComparisonDialog
@@ -153,6 +158,7 @@ fun DeveloperDebugScreen(
         "⚡ Recommendation",
         "🔬 A/B Testing (${abSessions.size})",
         "⚙️ Calibration",
+        "🧬 Adaptive Intelligence",
         "📸 Captures (${metadataLogs.size})",
         "🧪 Test Simulation",
         "📝 Logs (${logs.size})"
@@ -286,9 +292,10 @@ fun DeveloperDebugScreen(
                     onSelectSession = { selectedAbSessionForDialog = it }
                 )
                 5 -> ParameterCalibrationTab()
-                6 -> CapturedMetadataTab(metadataLogs)
-                7 -> SimulationTestTab(hardwareInfo)
-                8 -> LogsTab(logs)
+                6 -> AdaptiveIntelligenceTab(hardwareInfo)
+                7 -> CapturedMetadataTab(metadataLogs)
+                8 -> SimulationTestTab(hardwareInfo)
+                9 -> LogsTab(logs)
             }
         }
     }
@@ -540,6 +547,21 @@ private fun LiveSceneTab(analysis: SceneAnalysis) {
                 DebugItem("Photo Quality Score", "${analysis.photoQuality.totalScore}/100 (${analysis.photoQuality.ratingLabel})")
             }
         }
+
+        if (analysis.subject.isPersonPresent && analysis.subject.detectedFaces.isNotEmpty()) {
+            item {
+                DebugCard(title = "Face Exposure Telemetry (V0.4)", icon = Icons.Default.Camera) {
+                    DebugItem("Primary Face Brightness", "${String.format(Locale.US, "%.1f", analysis.subject.primaryFaceBrightness)}%")
+                    DebugItem("Face Relative Exposure", "${String.format(Locale.US, "%+.1f", analysis.subject.primaryFaceExposureRelativeToScene)}% vs Scene")
+                    DebugItem("Face Highlight Clipping", "${String.format(Locale.US, "%.1f", analysis.subject.primaryFaceClipping)}%")
+                    DebugItem("Face Shadow Ratio", "${String.format(Locale.US, "%.1f", analysis.subject.primaryFaceShadowLevel)}%")
+                    DebugItem("Face Count", "${analysis.subject.numberOfFaces}")
+                    analysis.subject.detectedFaces.forEachIndexed { idx, face ->
+                        DebugItem("Face #${idx + 1} Bounds", "[${String.format(Locale.US, "%.2f", face.bounds.left)}, ${String.format(Locale.US, "%.2f", face.bounds.top)}] (${String.format(Locale.US, "%.1f", face.faceBrightness)}% Luma)")
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -553,12 +575,110 @@ private fun EngineDecisionsTab(
     analysis: SceneAnalysis,
     hardware: CameraCapabilities
 ) {
+    val resolvedSettings = remember(recommendation.captureIntent, hardware) {
+        CameraHardwareAdapter.resolveIntent(recommendation.captureIntent, hardware)
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // V0.4 "Why SMART AUTO?" Panel
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = DarkSurfaceElevated),
+                border = BorderStroke(1.5.dp, CyberCyan)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Psychology,
+                            contentDescription = null,
+                            tint = CyberCyan,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Why SMART AUTO? (AI Intent Explanation)",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = CyberCyan
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = recommendation.captureIntent.reasoning,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        color = PureWhite
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    HorizontalDivider(color = Color(0x22FFFFFF), thickness = 1.dp)
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    val intent = recommendation.captureIntent
+                    DebugItem("Target Strategy", intent.exposurePriority)
+                    DebugItem("Highlight Protection", intent.highlightProtection.label)
+                    DebugItem("Shadow Priority", intent.shadowPriority.label)
+                    DebugItem("Face Priority Mode", intent.facePriority.label)
+                    DebugItem("Motion Priority", intent.motionPriority.label)
+                    DebugItem("Target Sensor EV Offset", "${String.format(Locale.US, "%+.2f", intent.preferredExposureCompensation)} EV")
+                }
+            }
+        }
+
+        // V0.5 "Why did SMART AUTO change?" Adaptive Explanation Panel
+        item {
+            val lastAdaptiveExplanation by AdaptiveIntelligenceEngine.lastExplanation.collectAsState()
+            lastAdaptiveExplanation?.let { exp ->
+                DebugCard(title = "Why did SMART AUTO change? (Adaptive Intelligence)", icon = Icons.Default.Psychology) {
+                    DebugItem("Scene Context", exp.scene)
+                    DebugItem("Base Intent EV Target", "${String.format(Locale.US, "%+.2f", exp.baseEv)} EV")
+                    DebugItem("Learned Adaptive Bias", "${String.format(Locale.US, "%+.2f", exp.adaptiveBias)} EV")
+                    DebugItem("Final Adjusted EV", "${String.format(Locale.US, "%+.2f", exp.finalEv)} EV")
+                    DebugItem("Valid A/B Evidence", "${exp.evidenceSamples} test samples")
+                    DebugItem("Statistical Confidence", "${exp.confidencePct}%")
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Empirical Rationale: ${exp.reason}",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
+                        color = ElectricGold
+                    )
+                }
+            }
+        }
+
+        // V0.4 Hardware Resolution & Fallback Audit
+        item {
+            DebugCard(title = "Hardware Translation & Fallback Audit", icon = Icons.Default.Tune) {
+                DebugItem("Hardware Device", "${hardware.deviceName} (${hardware.hardwareLevel.label})")
+                DebugItem("Requested EV Index", "${resolvedSettings.requestedEvIndex} (${String.format(Locale.US, "%+.2f", resolvedSettings.requestedEvOffset)} EV)")
+                DebugItem("Applied EV Index", "${resolvedSettings.appliedEvIndex} (${String.format(Locale.US, "%+.2f", resolvedSettings.appliedEvOffset)} EV)")
+                DebugItem("Requested Zoom", "${resolvedSettings.requestedZoom}x")
+                DebugItem("Applied Zoom", "${resolvedSettings.appliedZoom}x")
+                DebugItem("Flash Control", "${resolvedSettings.requestedFlash.label} → ${resolvedSettings.appliedFlash.label}")
+
+                if (resolvedSettings.toFallbackMap().isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Active Hardware Fallbacks / Graceful Mitigations:",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = ElectricGold
+                    )
+                    resolvedSettings.toFallbackMap().forEach { (k, v) ->
+                        DebugItem("⚠ $k", v)
+                    }
+                } else {
+                    DebugItem("HAL Status", "All requested controls natively supported")
+                }
+            }
+        }
+
         item {
             DebugCard(title = "AI Decision & Recommendations", icon = Icons.Default.Speed) {
                 DebugItem("Primary Action", recommendation.primaryActionText)
@@ -593,21 +713,26 @@ private fun EngineDecisionsTab(
 }
 
 /**
- * Test Simulation Suite Tab:
- * Simulates any photography scene against device capabilities offline.
+ * Test Simulation Suite Tab (V0.4):
+ * Simulates all 15 photography scenarios against device capabilities offline,
+ * showing the CaptureIntent, Why SMART AUTO reasoning, and Hardware Translation fallback audit.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SimulationTestTab(hardwareInfo: CameraCapabilities) {
-    var selectedSceneType by remember { mutableStateOf(SceneType.PORTRAIT) }
+    var selectedScenario by remember { mutableStateOf(SimulationScenario.HARSH_BACKLIGHT) }
     val decisionEngine = remember { CameraDecisionEngine() }
 
-    val simulatedAnalysis = remember(selectedSceneType) {
-        generateSimulatedSceneAnalysis(selectedSceneType)
+    val simulatedAnalysis = remember(selectedScenario) {
+        SimulationScenariosProvider.getAnalysisForScenario(selectedScenario)
     }
 
     val simulatedRec = remember(simulatedAnalysis, hardwareInfo) {
         decisionEngine.evaluate(simulatedAnalysis, hardwareInfo)
+    }
+
+    val simulatedResolvedSettings = remember(simulatedRec.captureIntent, hardwareInfo) {
+        CameraHardwareAdapter.resolveIntent(simulatedRec.captureIntent, hardwareInfo)
     }
 
     LazyColumn(
@@ -633,14 +758,14 @@ private fun SimulationTestTab(hardwareInfo: CameraCapabilities) {
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Offline Scene Simulation",
+                            text = "15 Test Simulation Scenarios (V0.4)",
                             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                             color = ElectricGold
                         )
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Simulates camera sensor conditions and verifies decision engine outputs against device HAL.",
+                        text = "Simulates edge cases across dynamic range, backlighting, faces, motion, and color temp. Verifies CaptureIntent and hardware adaptation offline.",
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                         color = TextSecondary
                     )
@@ -651,11 +776,11 @@ private fun SimulationTestTab(hardwareInfo: CameraCapabilities) {
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        SceneType.values().filter { it != SceneType.UNKNOWN }.forEach { scene ->
+                        SimulationScenario.values().forEach { scenario ->
                             FilterChip(
-                                selected = selectedSceneType == scene,
-                                onClick = { selectedSceneType = scene },
-                                label = { Text(scene.displayName, fontSize = 11.sp) },
+                                selected = selectedScenario == scenario,
+                                onClick = { selectedScenario = scenario },
+                                label = { Text(scenario.displayName, fontSize = 11.sp) },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = CyberCyan,
                                     selectedLabelColor = Color.Black,
@@ -670,22 +795,96 @@ private fun SimulationTestTab(hardwareInfo: CameraCapabilities) {
         }
 
         item {
-            DebugCard(title = "Simulated Scene Metrics (${selectedSceneType.displayName})", icon = Icons.Default.Psychology) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = DarkSurfaceElevated),
+                border = BorderStroke(1.5.dp, CyberCyan)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Psychology,
+                            contentDescription = null,
+                            tint = CyberCyan,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Why SMART AUTO? (${selectedScenario.displayName})",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = CyberCyan
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = simulatedRec.captureIntent.reasoning,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        color = PureWhite
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    HorizontalDivider(color = Color(0x22FFFFFF), thickness = 1.dp)
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    val intent = simulatedRec.captureIntent
+                    DebugItem("Target Strategy", intent.exposurePriority)
+                    DebugItem("Highlight Protection", intent.highlightProtection.label)
+                    DebugItem("Shadow Priority", intent.shadowPriority.label)
+                    DebugItem("Face Priority Mode", intent.facePriority.label)
+                    DebugItem("Motion Priority", intent.motionPriority.label)
+                    DebugItem("Target Sensor EV Offset", "${String.format(Locale.US, "%+.2f", intent.preferredExposureCompensation)} EV")
+                }
+            }
+        }
+
+        item {
+            DebugCard(title = "Hardware Translation & Fallback Audit", icon = Icons.Default.Tune) {
+                DebugItem("Hardware Device", "${hardwareInfo.deviceName} (${hardwareInfo.hardwareLevel.label})")
+                DebugItem("Requested EV Index", "${simulatedResolvedSettings.requestedEvIndex} (${String.format(Locale.US, "%+.2f", simulatedResolvedSettings.requestedEvOffset)} EV)")
+                DebugItem("Applied EV Index", "${simulatedResolvedSettings.appliedEvIndex} (${String.format(Locale.US, "%+.2f", simulatedResolvedSettings.appliedEvOffset)} EV)")
+                DebugItem("Flash Control", "${simulatedResolvedSettings.requestedFlash.label} → ${simulatedResolvedSettings.appliedFlash.label}")
+
+                if (simulatedResolvedSettings.toFallbackMap().isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Hardware Fallbacks / Graceful Mitigations:",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = CrimsonAlert
+                    )
+                    simulatedResolvedSettings.toFallbackMap().forEach { (k, v) ->
+                        DebugItem("⚠ $k", v)
+                    }
+                } else {
+                    DebugItem("HAL Status", "All requested controls natively supported")
+                }
+            }
+        }
+
+        item {
+            DebugCard(title = "Simulated Scene Metrics (${selectedScenario.displayName})", icon = Icons.Default.Psychology) {
                 DebugItem("Lighting Condition", simulatedAnalysis.lighting.condition.label)
                 DebugItem("Luma Brightness", "${simulatedAnalysis.lighting.brightness}/100")
                 DebugItem("Contrast", "${simulatedAnalysis.lighting.contrast}/100")
+                DebugItem("Highlight Clipping", "${simulatedAnalysis.lighting.highlightClipping}%")
+                DebugItem("Shadow Level", "${simulatedAnalysis.lighting.shadowLevel}%")
                 DebugItem("Faces Detected", "${simulatedAnalysis.subject.numberOfFaces}")
-                DebugItem("Person Present", if (simulatedAnalysis.subject.isPersonPresent) "YES" else "NO")
+                if (simulatedAnalysis.subject.numberOfFaces > 0) {
+                    DebugItem("Face Brightness", "${String.format(Locale.US, "%.1f", simulatedAnalysis.subject.primaryFaceBrightness)}% Luma")
+                    DebugItem("Face vs Scene Offset", "${String.format(Locale.US, "%+.1f", simulatedAnalysis.subject.primaryFaceExposureRelativeToScene)}%")
+                }
                 DebugItem("Motion State", simulatedAnalysis.motion.motionLevel.label)
-                DebugItem("Photo Score", "${simulatedAnalysis.photoQuality.totalScore}/100 (${simulatedAnalysis.photoQuality.ratingLabel})")
+                DebugItem("Estimated Kelvin", "${simulatedAnalysis.estimatedKelvin}K")
+                DebugItem("Photo Quality Score", "${simulatedAnalysis.photoQuality.totalScore}/100 (${simulatedAnalysis.photoQuality.ratingLabel})")
             }
         }
 
         item {
             DebugCard(title = "Engine Output for Simulation", icon = Icons.Default.Speed) {
                 DebugItem("Primary Action", simulatedRec.primaryActionText)
-                DebugItem("Reasoning", simulatedRec.secondaryReasonText)
-                DebugItem("Enhancement Profile", simulatedRec.imageProcessingProfile.displayName)
+                DebugItem("Profile Applied", simulatedRec.imageProcessingProfile.displayName)
                 DebugItem("Target Exposure (EV)", "${simulatedRec.exposureCompensationIndex} index (${String.format(Locale.US, "%.2f", simulatedRec.exposureCompensationEv)} EV)")
                 DebugItem("Focus Strategy", simulatedRec.focusStrategy.label)
                 DebugItem("Flash Recommendation", simulatedRec.flashRecommendation.label)
@@ -1407,6 +1606,11 @@ private fun CapturedMetadataTab(metadataLogs: List<com.example.model.CaptureMeta
                         DebugItem("Subject", "${item.faceCount} Faces Detected | Motion: ${item.motionLevel.label}")
                         DebugItem("Processing Profile", item.processingProfile.displayName)
                         DebugItem("Total Photo Score", "${item.qualityScore} / 100")
+                        DebugItem("Highlight Protection", item.highlightProtection)
+                        DebugItem("Shadow Strategy", item.shadowStrategy)
+                        DebugItem("Face Priority Mode", item.facePriorityMode)
+                        DebugItem("Target Exposure (EV)", "${String.format(Locale.US, "%+.2f", item.targetEv)} EV")
+                        DebugItem("AI Decision Reasoning", item.decisionReasoning)
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "Applied Settings:",
@@ -1415,6 +1619,17 @@ private fun CapturedMetadataTab(metadataLogs: List<com.example.model.CaptureMeta
                         )
                         item.appliedSettings.forEach { (k, v) ->
                             DebugItem(k, v)
+                        }
+                        if (item.hardwareFallbackSettings.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Hardware Fallbacks / Graceful Mitigations:",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = CrimsonAlert
+                            )
+                            item.hardwareFallbackSettings.forEach { (k, v) ->
+                                DebugItem("⚠ $k", v)
+                            }
                         }
                     }
                 }

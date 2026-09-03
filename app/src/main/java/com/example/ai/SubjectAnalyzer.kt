@@ -35,6 +35,7 @@ class SubjectAnalyzer {
 
     /**
      * Primary analysis method taking the live ImageProxy frame and executing real ML Kit Face Detection.
+     * Computes face brightness, relative exposure, highlight clipping, and shadow levels.
      */
     @OptIn(ExperimentalGetImage::class)
     fun analyzeWithFrame(
@@ -44,7 +45,9 @@ class SubjectAnalyzer {
         minSkinX: Float,
         maxSkinX: Float,
         minSkinY: Float,
-        maxSkinY: Float
+        maxSkinY: Float,
+        sceneLumaArray: Array<IntArray>? = null,
+        sceneMeanLuma: Float = 128f
     ): SubjectAnalysis {
         val mediaImage = imageProxy.image
         if (mediaImage != null) {
@@ -66,7 +69,54 @@ class SubjectAnalyzer {
                             (box.right / frameWidth).coerceIn(0f, 1f),
                             (box.bottom / frameHeight).coerceIn(0f, 1f)
                         )
-                        DetectedFace(bounds = normBox, confidence = 0.95f)
+
+                        // Calculate face exposure metrics from sampled luma grid
+                        var faceBrightness = 50f
+                        var faceClipping = 0f
+                        var faceShadow = 0f
+                        var faceExpRel = 0f
+
+                        if (sceneLumaArray != null && sceneLumaArray.isNotEmpty()) {
+                            val gridH = sceneLumaArray.size
+                            val gridW = sceneLumaArray[0].size
+                            val minGX = (normBox.left * gridW).toInt().coerceIn(0, gridW - 1)
+                            val maxGX = (normBox.right * gridW).toInt().coerceIn(0, gridW - 1)
+                            val minGY = (normBox.top * gridH).toInt().coerceIn(0, gridH - 1)
+                            val maxGY = (normBox.bottom * gridH).toInt().coerceIn(0, gridH - 1)
+
+                            var faceLumaSum = 0L
+                            var faceSamples = 0
+                            var faceHighClips = 0
+                            var faceShadowClips = 0
+
+                            for (gy in minGY..maxGY) {
+                                for (gx in minGX..maxGX) {
+                                    val l = sceneLumaArray[gy][gx]
+                                    faceLumaSum += l
+                                    faceSamples++
+                                    if (l > 240) faceHighClips++
+                                    if (l < 30) faceShadowClips++
+                                }
+                            }
+
+                            if (faceSamples > 0) {
+                                val meanFaceLuma = faceLumaSum.toFloat() / faceSamples
+                                faceBrightness = (meanFaceLuma / 2.55f).coerceIn(0f, 100f)
+                                faceClipping = (faceHighClips.toFloat() / faceSamples) * 100f
+                                faceShadow = (faceShadowClips.toFloat() / faceSamples) * 100f
+                                val sceneBrightness = (sceneMeanLuma / 2.55f).coerceIn(0f, 100f)
+                                faceExpRel = faceBrightness - sceneBrightness
+                            }
+                        }
+
+                        DetectedFace(
+                            bounds = normBox,
+                            confidence = 0.95f,
+                            faceBrightness = faceBrightness,
+                            faceExposureRelativeToScene = faceExpRel,
+                            faceClipping = faceClipping,
+                            faceShadowLevel = faceShadow
+                        )
                     }
 
                     val maxFaceArea = detectedFaces.maxOfOrNull {
@@ -83,13 +133,20 @@ class SubjectAnalyzer {
 
                     val skinRatio = if (totalSampleCount > 0) skinPixelCount.toFloat() / totalSampleCount else 0.05f
 
+                    val primaryFace = detectedFaces.maxByOrNull { it.bounds.width() * it.bounds.height() }
+                        ?: detectedFaces.first()
+
                     return SubjectAnalysis(
                         numberOfFaces = detectedFaces.size,
                         isPersonPresent = true,
                         approximateSubjectSize = subjectSize,
                         isLikelyPortrait = isPortrait,
                         detectedFaces = detectedFaces,
-                        skinRatio = skinRatio
+                        skinRatio = skinRatio,
+                        primaryFaceBrightness = primaryFace.faceBrightness,
+                        primaryFaceExposureRelativeToScene = primaryFace.faceExposureRelativeToScene,
+                        primaryFaceClipping = primaryFace.faceClipping,
+                        primaryFaceShadowLevel = primaryFace.faceShadowLevel
                     )
                 }
             } catch (e: Exception) {
